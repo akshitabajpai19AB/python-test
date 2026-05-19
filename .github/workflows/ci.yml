@@ -1,0 +1,10 @@
+name: CI (Using Reusable)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    uses: akshitabajpai19AB/ci-platform/.github/workflows/ci.yml@main
+    secrets: inherit
