@@ -1,0 +1,194 @@
+name: "PIM Access Request"
+description: "Request temporary Azure AD role activation via Privileged Identity Management (JIT access)."
+title: "[PIM] "
+labels: ["pim-request", "status:new"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Maybank IAM — PIM Access Request
+        Complete all **required** fields. Optional banking-compliance fields may be left blank; the validation workflow will prompt you if additional context is needed based on the resource classification.
+        > **Policy reminder:** PIM activations are logged immutably and subject to BNM RMiT 10.27 privileged access controls. Misuse is a disciplinary offence.
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Requested Azure AD Role
+      description: Select the PIM-eligible role you need to activate. Roles are defined in `config/pim-roles.yml`.
+      options:
+        - "Global Reader"
+        - "Security Reader"
+        - "Compliance Reader"
+        - "Azure AD PIM Reader"
+        - "Application Administrator"
+        - "Cloud Application Administrator"
+        - "User Administrator"
+        - "Privileged Role Administrator"
+        - "Security Administrator"
+        - "Conditional Access Administrator"
+        - "Compliance Administrator"
+        - "Identity Governance Administrator"
+        - "Authentication Administrator"
+        - "Azure Subscription Owner (Break-glass only)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Target Environment
+      options:
+        - "Non-Production"
+        - "Staging"
+        - "Production"
+        - "DR"
+    validations:
+      required: true
+
+  - type: input
+    id: resource_name
+    attributes:
+      label: Application / Resource Name
+      description: Name of the Azure resource or application this PIM activation relates to. The workflow will read its classification tags.
+      placeholder: "e.g. maybank-cbs-prod, iam-rbac-automation"
+    validations:
+      required: true
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Justification
+      description: "Minimum 50 characters. Describe the specific task requiring elevated access, the risk if not granted, and expected actions."
+      placeholder: "I require Global Reader access to investigate a production alert in the CBS subscription. Ticket INC-12345 requires me to audit IAM assignments across all resource groups. I will only read and will not make any changes."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: duration
+    attributes:
+      label: Activation Duration
+      description: Select the minimum duration required. Maximum duration per role is enforced by `config/pim-roles.yml`.
+      options:
+        - "1 hour"
+        - "2 hours"
+        - "4 hours"
+        - "8 hours"
+    validations:
+      required: true
+
+  - type: input
+    id: access_start
+    attributes:
+      label: Access Start Date/Time (MYT)
+      description: |
+        Enter `Immediate` for instant activation on approval, or a future ISO 8601 datetime in MYT for scheduled provisioning (max 30 days ahead).
+        The Access End Date/Time will be calculated as Start + Duration and displayed in the validation comment.
+      placeholder: "Immediate  OR  2026-06-01T09:00+08:00"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: service_account
+    attributes:
+      label: Service Account / Automation
+      options:
+        - label: "This request is for a service account or automation identity (triggers stricter approval chain: Business + IAM + Risk)"
+
+  - type: checkboxes
+    id: declaration
+    attributes:
+      label: Declaration
+      description: All boxes must be checked before submission.
+      options:
+        - label: "I have read and accept the Maybank IAM Usage Policy and PIM Acceptable Use Policy."
+          required: true
+        - label: "The information above is accurate and complete to the best of my knowledge."
+          required: true
+        - label: "I understand that unauthorised or inappropriate use of elevated access is a disciplinary offence under Maybank's Code of Conduct."
+          required: true
+
+  - type: markdown
+    attributes:
+      value: "---\n### Optional Banking-Compliance Fields\nThese fields are optional at submission. The validation workflow may require them based on resource classification."
+
+  - type: input
+    id: employee_id
+    attributes:
+      label: Maybank Employee ID (Optional)
+      description: Format `M` followed by 6 digits. Will be partially masked in all comments.
+      placeholder: "M123456"
+
+  - type: dropdown
+    id: department
+    attributes:
+      label: Department Code (Optional)
+      description: Your Maybank department. Full list in `config/departments.yml`.
+      options:
+        - ""
+        - "GT-001 — Group Technology - Platform Engineering"
+        - "GT-002 — Group Technology - Cybersecurity"
+        - "GT-003 — Group Technology - Application Development"
+        - "GT-004 — Group Technology - Data & Analytics"
+        - "GT-005 — Group Technology - Infrastructure"
+        - "RB-001 — Retail Banking - Digital"
+        - "RB-002 — Retail Banking - Operations"
+        - "CB-001 — Community Banking"
+        - "IB-001 — Investment Banking"
+        - "GF-001 — Group Finance"
+        - "GR-001 — Group Risk"
+        - "GC-001 — Group Compliance"
+        - "GA-001 — Group Audit"
+
+  - type: input
+    id: cost_centre
+    attributes:
+      label: Cost Centre (Optional)
+      description: Format `CC-` followed by 5 digits.
+      placeholder: "CC-12345"
+
+  - type: input
+    id: supervisor_email
+    attributes:
+      label: Supervisor / Line Manager Email (Optional)
+      description: Valid Maybank email (`@maybank.com`). Will be notified on approval and rejection.
+      placeholder: "manager.name@maybank.com"
+
+  - type: input
+    id: ticket_ref
+    attributes:
+      label: Ticket / Incident Reference (Optional)
+      description: Format `INC-XXXXX` or `REQ-XXXXX`.
+      placeholder: "INC-12345"
+
+  - type: input
+    id: cab_ref
+    attributes:
+      label: Change Advisory Board (CAB) Reference (Optional)
+      description: "Format `CHG-XXXXX`. If provided, the workflow will validate it against the ITSM API before provisioning."
+      placeholder: "CHG-12345"
+
+  - type: dropdown
+    id: data_classification
+    attributes:
+      label: Data Classification of Target Resource (Optional)
+      description: Assists DPIA determination. If left blank, the workflow reads the `maybank:classification` tag from the Azure resource.
+      options:
+        - ""
+        - "Public"
+        - "Internal"
+        - "Confidential"
+        - "Restricted"
+
+  - type: textarea
+    id: business_impact
+    attributes:
+      label: Business Impact if NOT Approved (Optional)
+      description: Recommended for production access requests.
+      placeholder: "Inability to investigate the CBS production alert will delay incident resolution and risk SLA breach."
+
+  - type: textarea
+    id: out_of_hours
+    attributes:
+      label: Out-of-Hours Justification (Optional)
+      description: Required if this request is raised outside business hours (Mon–Fri, 08:00–18:00 MYT).
+      placeholder: "Production incident requires immediate investigation. On-call engineer contacted."
