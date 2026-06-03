@@ -12,8 +12,6 @@ body:
     id: email
     attributes:
       label: User Email
-      description: Corporate email
-      placeholder: user@company.com
     validations:
       required: true
 
@@ -32,8 +30,6 @@ body:
     id: scope
     attributes:
       label: Scope
-      description: Subscription or Resource Group
-      placeholder: /subscriptions/xxxx
     validations:
       required: true
 
