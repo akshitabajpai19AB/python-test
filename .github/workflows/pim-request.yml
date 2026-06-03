@@ -1,4 +1,4 @@
-name: Azure PIM Activation
+name: PIM Activation
 
 on:
   issues:
@@ -11,33 +11,159 @@ permissions:
 
 jobs:
 
-  process-request:
+  approval:
 
     if: contains(github.event.issue.labels.*.name, 'pim-request')
 
     runs-on: ubuntu-latest
 
+    environment:
+      name: pim-approval
+
     steps:
 
-      - name: Send Request To Logic App
+      - name: Approved
+        run: echo "Approval granted"
 
-        env:
-          LOGIC_APP_URL: ${{ secrets.LOGIC_APP_URL }}
+  activate:
 
+    needs: approval
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Extract Issue Values
+        id: extract
         run: |
 
-          PAYLOAD=$(jq -n \
-          --arg issueNumber "${{ github.event.issue.number }}" \
-          --arg repository "${{ github.repository }}" \
-          --arg issueBody "${{ github.event.issue.body }}" \
-          '{
-             issueNumber:$issueNumber,
-             repository:$repository,
-             issueBody:$issueBody
-          }')
+          BODY="${{ github.event.issue.body }}"
+
+          EMAIL=$(echo "$BODY" | grep "User Email" -A1 | tail -1)
+          ROLE=$(echo "$BODY" | grep "Azure Role" -A1 | tail -1)
+          DURATION=$(echo "$BODY" | grep "Duration Hours" -A1 | tail -1)
+
+          echo "email=$EMAIL" >> $GITHUB_OUTPUT
+          echo "role=$ROLE" >> $GITHUB_OUTPUT
+          echo "duration=$DURATION" >> $GITHUB_OUTPUT
+
+      - name: Get User ObjectId
+        id: user
+        run: |
+
+          OBJECTID=$(az ad user show \
+            --id "${{ steps.extract.outputs.email }}" \
+            --query id \
+            -o tsv)
+
+          echo "objectid=$OBJECTID" >> $GITHUB_OUTPUT
+
+      - name: Role Mapping
+        id: rolemap
+        run: |
+
+          ROLE="${{ steps.extract.outputs.role }}"
+
+          if [ "$ROLE" = "Contributor" ]; then
+            ROLEID="b24988ac-6180-42a0-ab88-20f7382dd24c"
+          elif [ "$ROLE" = "Reader" ]; then
+            ROLEID="acdd72a7-3385-48ef-bd42-f606fba81ae7"
+          else
+            ROLEID="00482a5a-887f-4fb3-b363-3b7fe8e74483"
+          fi
+
+          echo "roleid=$ROLEID" >> $GITHUB_OUTPUT
+
+      - name: Get Eligibility Schedule
+        id: eligibility
+        run: |
+
+          az rest \
+            --method GET \
+            --url "https://management.azure.com/providers/Microsoft.Authorization/roleEligibilitySchedules?api-version=2020-10-01" \
+            > eligibility.json
+
+          ELIGIBILITY=$(jq -r '.value[0].name' eligibility.json)
+
+          echo "eligibility=$ELIGIBILITY" >> $GITHUB_OUTPUT
+
+      - name: Activate PIM
+        run: |
+
+          REQUESTID=$(uuidgen)
+
+          cat > body.json << EOF
+          {
+            "properties": {
+              "principalId": "${{ steps.user.outputs.objectid }}",
+              "requestType": "SelfActivate",
+              "linkedRoleEligibilityScheduleId": "${{ steps.eligibility.outputs.eligibility }}",
+              "justification": "GitHub approved request",
+              "scheduleInfo": {
+                "startDateTime": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+                "expiration": {
+                  "type": "AfterDuration",
+                  "duration": "PT${{ steps.extract.outputs.duration }}H"
+                }
+              }
+            }
+          }
+          EOF
+
+          az rest \
+            --method PUT \
+            --url "https://management.azure.com/providers/Microsoft.Authorization/roleAssignmentScheduleRequests/$REQUESTID?api-version=2020-10-01" \
+            --body @body.json
+
+      - name: Log Analytics
+        run: |
+
+          cat > log.json << EOF
+          [
+            {
+              "Requestor":"${{ steps.extract.outputs.email }}",
+              "Role":"${{ steps.extract.outputs.role }}",
+              "Duration":"${{ steps.extract.outputs.duration }}",
+              "Status":"Approved",
+              "Timestamp":"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            }
+          ]
+          EOF
 
           curl \
-            --request POST \
-            --url "$LOGIC_APP_URL" \
-            --header "Content-Type: application/json" \
-            --data "$PAYLOAD"
+            -X POST \
+            "${{ secrets.LOG_ANALYTICS_DCR_URI }}" \
+            -H "Content-Type: application/json" \
+            -d @log.json
+
+      - name: Comment Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: "✅ PIM activated successfully."
+            })
+
+      - name: Close Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: "closed"
+            })
