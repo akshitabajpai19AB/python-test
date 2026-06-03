@@ -1,0 +1,53 @@
+name: PIM Access Request
+description: Request Azure PIM Activation
+
+title: "[PIM] Access Request"
+
+labels:
+  - pim-request
+
+body:
+
+  - type: input
+    id: email
+    attributes:
+      label: User Email
+      description: Corporate email
+      placeholder: user@company.com
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Azure Role
+      options:
+        - Reader
+        - Contributor
+        - Key Vault Administrator
+    validations:
+      required: true
+
+  - type: input
+    id: scope
+    attributes:
+      label: Scope
+      description: Subscription or Resource Group
+      placeholder: /subscriptions/xxxx
+    validations:
+      required: true
+
+  - type: input
+    id: duration
+    attributes:
+      label: Duration Hours
+      placeholder: "8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Business Justification
+    validations:
+      required: true
