@@ -1,0 +1,43 @@
+name: Azure PIM Activation
+
+on:
+  issues:
+    types:
+      - opened
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+
+  process-request:
+
+    if: contains(github.event.issue.labels.*.name, 'pim-request')
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Send Request To Logic App
+
+        env:
+          LOGIC_APP_URL: ${{ secrets.LOGIC_APP_URL }}
+
+        run: |
+
+          PAYLOAD=$(jq -n \
+          --arg issueNumber "${{ github.event.issue.number }}" \
+          --arg repository "${{ github.repository }}" \
+          --arg issueBody "${{ github.event.issue.body }}" \
+          '{
+             issueNumber:$issueNumber,
+             repository:$repository,
+             issueBody:$issueBody
+          }')
+
+          curl \
+            --request POST \
+            --url "$LOGIC_APP_URL" \
+            --header "Content-Type: application/json" \
+            --data "$PAYLOAD"
